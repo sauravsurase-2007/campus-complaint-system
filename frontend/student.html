@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Student Dashboard - Campus Complaint Portal</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">&#127891; Campus Complaint Portal</div>
+    <div class="right"><span id="userName" class="chip"></span><button id="logout" class="btn ghost">Log out</button></div>
+  </header>
+  <main class="container">
+    <h1>My Dashboard</h1>
+    <div id="stats" class="stats"></div>
+    <div class="grid">
+      <section class="card">
+        <h2>Submit a complaint</h2>
+        <form id="form" class="stack">
+          <label>Title<input id="title" required minlength="3" maxlength="100" placeholder="e.g. Water leakage in Hostel B"></label>
+          <div class="row">
+            <label>Category<select id="category"></select></label>
+            <label>Priority<select id="priority"></select></label>
+          </div>
+          <label>Location (optional)<input id="location" maxlength="100" placeholder="Building / room"></label>
+          <label>Description<textarea id="description" rows="5" required minlength="10" maxlength="2000" placeholder="Describe the problem in detail..."></textarea></label>
+          <button class="btn" type="submit">Submit complaint</button>
+        </form>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>My complaints</h2>
+          <div class="row tight"><select id="filter"></select><button id="refresh" class="btn ghost">Refresh</button></div></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Complaint</th><th>Priority</th><th>Status</th><th>Submitted</th></tr></thead>
+          <tbody id="list"><tr><td colspan="4" class="empty">Loading...</td></tr></tbody>
+        </table></div>
+        <p class="muted small">Click a complaint to see admin remarks and history.</p>
+      </section>
+    </div>
+  </main>
+  <div id="modal" class="modal hidden"><div id="modalBody" class="modal-card"></div></div>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/student.js"></script>
+</body>
+</html>

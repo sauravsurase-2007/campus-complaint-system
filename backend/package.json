@@ -1,0 +1,8 @@
+{
+  "name": "campus-complaints-api",
+  "version": "1.0.0",
+  "description": "Lambda API for the Campus Complaint Management System",
+  "main": "src/index.js",
+  "license": "MIT",
+  "private": true
+}

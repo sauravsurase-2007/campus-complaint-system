@@ -1,0 +1,11 @@
+{
+  "name": "campus-complaint-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloud-Based Campus Complaint Management System",
+  "scripts": {
+    "preview": "npx http-server frontend -p 5500 -c-1",
+    "build": "sam build",
+    "validate": "sam validate --lint"
+  }
+}

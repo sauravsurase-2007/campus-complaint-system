@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin Dashboard - Campus Complaint Portal</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header class="topbar admin">
+    <div class="brand">&#128737; Campus Complaint Portal &middot; Admin</div>
+    <div class="right"><span id="userName" class="chip"></span><button id="logout" class="btn ghost">Log out</button></div>
+  </header>
+  <main class="container">
+    <h1>All Complaints</h1>
+    <div id="stats" class="stats"></div>
+    <section class="card">
+      <div class="card-head">
+        <div class="row tight wrap">
+          <input id="fSearch" type="search" placeholder="Search title, student, ID...">
+          <select id="fStatus"></select>
+          <select id="fCategory"></select>
+          <button id="refresh" class="btn ghost">Refresh</button>
+        </div>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Complaint</th><th>Student</th><th>Priority</th><th>Status</th><th>Submitted</th></tr></thead>
+        <tbody id="list"><tr><td colspan="5" class="empty">Loading...</td></tr></tbody>
+      </table></div>
+      <p class="muted small">Click a row to update status and add a remark.</p>
+    </section>
+  </main>
+  <div id="modal" class="modal hidden"><div id="modalBody" class="modal-card"></div></div>
+  <script src="js/config.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,205 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Cloud-Based Campus Complaint Management System (S3 + Cognito + API Gateway + Lambda + DynamoDB + SNS)
+
+Parameters:
+  AdminEmail:
+    Type: String
+    Description: Email that receives a notification for every new complaint (you must confirm the SNS subscription email).
+  AppName:
+    Type: String
+    Default: campus-complaints
+    Description: Prefix used in resource names (lowercase letters, digits, hyphens).
+
+Globals:
+  Function:
+    Runtime: nodejs24.x
+    Architectures: [arm64]
+    Timeout: 15
+    MemorySize: 256
+
+Resources:
+  # ---------------------------------------------------------------- Cognito
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub ${AppName}-users
+      UsernameAttributes: [email]
+      AutoVerifiedAttributes: [email]
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub ${AppName}-web
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      PreventUserExistenceErrors: ENABLED
+      ExplicitAuthFlows: [ALLOW_USER_PASSWORD_AUTH, ALLOW_REFRESH_TOKEN_AUTH]
+      IdTokenValidity: 60
+      AccessTokenValidity: 60
+      RefreshTokenValidity: 7
+      TokenValidityUnits:
+        IdToken: minutes
+        AccessToken: minutes
+        RefreshToken: days
+
+  # Only members of this group are admins. Everybody else who signs up is a student.
+  AdminGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: Admins
+      Description: Campus administrators
+      UserPoolId: !Ref UserPool
+
+  StudentGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: Students
+      Description: Students (informational; any non-admin user is treated as a student)
+      UserPoolId: !Ref UserPool
+
+  # --------------------------------------------------------------- DynamoDB
+  ComplaintsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub ${AppName}-complaints
+      BillingMode: PROVISIONED          # 5+5 RCU/WCU incl. index stays inside the always-free 25/25
+      ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
+      AttributeDefinitions:
+        - { AttributeName: complaintId, AttributeType: S }
+        - { AttributeName: userId, AttributeType: S }
+        - { AttributeName: createdAt, AttributeType: S }
+      KeySchema:
+        - { AttributeName: complaintId, KeyType: HASH }
+      GlobalSecondaryIndexes:
+        - IndexName: userId-createdAt-index
+          KeySchema:
+            - { AttributeName: userId, KeyType: HASH }
+            - { AttributeName: createdAt, KeyType: RANGE }
+          Projection: { ProjectionType: ALL }
+          ProvisionedThroughput: { ReadCapacityUnits: 5, WriteCapacityUnits: 5 }
+      SSESpecification: { SSEEnabled: true }
+
+  # ------------------------------------------------------------------- SNS
+  AdminTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub ${AppName}-admin-alerts
+      Subscription:
+        - { Protocol: email, Endpoint: !Ref AdminEmail }
+
+  # Students are subscribed automatically (email protocol + per-recipient filter policy)
+  StudentTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: !Sub ${AppName}-student-updates
+
+  # --------------------------------------------------- API Gateway (HTTP API)
+  Api:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins: ['*']
+        AllowHeaders: [Authorization, Content-Type]
+        AllowMethods: [GET, POST, PUT, OPTIONS]
+        MaxAge: 600
+      DefaultRouteSettings:
+        ThrottlingBurstLimit: 20
+        ThrottlingRateLimit: 10
+      Auth:
+        DefaultAuthorizer: CognitoJwt
+        Authorizers:
+          CognitoJwt:
+            IdentitySource: $request.header.Authorization
+            JwtConfiguration:
+              issuer: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
+              audience:
+                - !Ref UserPoolClient
+
+  # ---------------------------------------------------------------- Lambda
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub ${AppName}-api
+      CodeUri: backend/
+      Handler: src/index.handler
+      Environment:
+        Variables:
+          TABLE_NAME: !Ref ComplaintsTable
+          ADMIN_TOPIC_ARN: !Ref AdminTopic
+          STUDENT_TOPIC_ARN: !Ref StudentTopic
+          ADMIN_GROUP: Admins
+      Policies:
+        - DynamoDBCrudPolicy: { TableName: !Ref ComplaintsTable }
+        - SNSPublishMessagePolicy: { TopicName: !GetAtt AdminTopic.TopicName }
+        - SNSPublishMessagePolicy: { TopicName: !GetAtt StudentTopic.TopicName }
+        - Statement:
+            - Effect: Allow
+              Action: sns:Subscribe
+              Resource: !Ref StudentTopic
+      Events:
+        CreateComplaint:
+          Type: HttpApi
+          Properties: { ApiId: !Ref Api, Path: /complaints, Method: POST }
+        ListComplaints:
+          Type: HttpApi
+          Properties: { ApiId: !Ref Api, Path: /complaints, Method: GET }
+        GetComplaint:
+          Type: HttpApi
+          Properties: { ApiId: !Ref Api, Path: '/complaints/{id}', Method: GET }
+        UpdateComplaint:
+          Type: HttpApi
+          Properties: { ApiId: !Ref Api, Path: '/complaints/{id}', Method: PUT }
+
+  # ------------------------------------------------------ S3 static website
+  WebsiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  WebsiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebsiteBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PublicReadForWebsite
+            Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub ${WebsiteBucket.Arn}/*
+
+Outputs:
+  Region:
+    Value: !Ref AWS::Region
+  ApiUrl:
+    Value: !Sub https://${Api}.execute-api.${AWS::Region}.amazonaws.com
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+  WebsiteBucket:
+    Value: !Ref WebsiteBucket
+  WebsiteUrl:
+    Value: !GetAtt WebsiteBucket.WebsiteURL
+  ComplaintsTableName:
+    Value: !Ref ComplaintsTable

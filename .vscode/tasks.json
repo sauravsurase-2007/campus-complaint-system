@@ -1,0 +1,8 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "SAM: validate", "type": "shell", "command": "sam validate --lint", "problemMatcher": [] },
+    { "label": "SAM: build", "type": "shell", "command": "sam build", "problemMatcher": [] },
+    { "label": "Preview frontend (http://localhost:5500)", "type": "shell", "command": "npx http-server frontend -p 5500 -c-1", "isBackground": true, "problemMatcher": [] }
+  ]
+}
